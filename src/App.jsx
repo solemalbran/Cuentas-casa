@@ -127,7 +127,7 @@ function generarPDF(mes, proveedores, data, catColors) {
 <body>
 <div class="page">
   <div class="header">
-    <p>Control de Cuentas del Hogar</p>
+    <p>Control de Cuentas Casa</p>
     <h1>Informe de Gastos — ${MESES[mes]} 2026</h1>
     <div class="total-box">
       <div class="total-label">Total del mes</div>
@@ -150,7 +150,7 @@ function generarPDF(mes, proveedores, data, catColors) {
       </tr>
     </tbody>
   </table>
-  <div class="footer">Generado el ${fecha} · Control de Cuentas del Hogar 2026</div>
+  <div class="footer">Generado el ${fecha} · Control de Cuentas Casa 2026</div>
 </div>
 </body>
 </html>`;
@@ -375,7 +375,7 @@ export default function App() {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ fontSize: 11, letterSpacing: 3, opacity: 0.6, marginBottom: 6, textTransform: "uppercase" }}>Control de Gastos</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>Cuentas del Hogar 2026</h1>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>Cuentas Casa 2026</h1>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button onClick={() => setShowModal(true)} style={btnHeader}><span style={{ fontSize: 16 }}>＋</span> Agregar proveedor</button>
               <button onClick={() => generarPDF(mesActivo, proveedores, data, catColors)} style={{ ...btnHeader, background: "rgba(255,255,255,0.18)", border: "1.5px solid rgba(255,255,255,0.5)" }}><span style={{ fontSize: 16 }}>⬇</span> Informe {MESES[mesActivo]}</button>
