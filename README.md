@@ -1,4 +1,4 @@
-# Control de Cuentas del Hogar
+# Control de Cuentas de la Casa
 
 App para controlar gastos mensuales del hogar con lectura automática de comprobantes via IA.
 
