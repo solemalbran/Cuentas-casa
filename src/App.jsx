@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PROVEEDORES_INIT = [
@@ -44,6 +44,24 @@ const ABRIL_DATA = {
   central:       { 3: 15853 },
   ruta_maipo:    { 3: 858 },
   canopsa:       { 3: 9800 },
+};
+
+// ── Helpers de localStorage ──────────────────────────────────
+const loadStorage = (key, fallback) => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch { return fallback; }
+};
+
+const saveStorage = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+};
+
+const initData = () => {
+  const d = {};
+  PROVEEDORES_INIT.forEach(p => { d[p.id] = { ...(ABRIL_DATA[p.id] || {}) }; });
+  return d;
 };
 
 const fmt = (n) => n ? `$${Number(n).toLocaleString("es-CL")}` : "—";
@@ -162,13 +180,10 @@ function generarPDF(mes, proveedores, data, catColors) {
 }
 
 export default function App() {
-  const [proveedores, setProveedores] = useState(PROVEEDORES_INIT);
-  const [catColors, setCatColors] = useState(CAT_COLORS_INIT);
-  const [data, setData] = useState(() => {
-    const d = {};
-    PROVEEDORES_INIT.forEach(p => { d[p.id] = { ...(ABRIL_DATA[p.id] || {}) }; });
-    return d;
-  });
+  // ── Estado con localStorage ──────────────────────────────────
+  const [proveedores, setProveedores] = useState(() => loadStorage('cc_proveedores', PROVEEDORES_INIT));
+  const [catColors, setCatColors] = useState(() => loadStorage('cc_catColors', CAT_COLORS_INIT));
+  const [data, setData] = useState(() => loadStorage('cc_data', initData()));
   const [mesActivo, setMesActivo] = useState(3);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
@@ -187,6 +202,11 @@ export default function App() {
   const [npCat, setNpCat] = useState("");
   const [npCatCustom, setNpCatCustom] = useState("");
   const fileRef = useRef();
+
+  // ── Guardar automáticamente cuando cambian los datos ──────────
+  useEffect(() => { saveStorage('cc_proveedores', proveedores); }, [proveedores]);
+  useEffect(() => { saveStorage('cc_catColors', catColors); }, [catColors]);
+  useEffect(() => { saveStorage('cc_data', data); }, [data]);
 
   const categorias = [...new Set(proveedores.map(p => p.categoria))];
   const mesesConDatos = MESES.map((m, i) => ({
@@ -313,7 +333,7 @@ export default function App() {
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f0f4f8", minHeight: "100vh", paddingBottom: 60 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* ── MODALS (Omitidos para no hacer el código gigante, aquí siguen igual) ── */}
+      {/* ── MODAL AGREGAR ── */}
       {showModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowModal(false)}>
           <div style={{ background: "white", borderRadius: 16, padding: 28, width: 360, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
@@ -340,6 +360,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ── MODAL PROVEEDOR DESCONOCIDO ── */}
       {showNuevoProvModal && pendingResult && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001 }} onClick={() => setShowNuevoProvModal(false)}>
           <div style={{ background: "white", borderRadius: 16, padding: 28, width: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
