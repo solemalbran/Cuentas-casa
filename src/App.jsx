@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PROVEEDORES_INIT = [
   { id: "aguas", nombre: "Aguas Manquehue", categoria: "Servicios Básicos" },
@@ -61,13 +62,12 @@ const diffLabel = (curr, prev) => {
   return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%`;
 };
 
-// ── Genera y descarga el PDF usando solo el browser (sin librerías) ──────────
+// ── Genera y descarga el PDF usando solo el browser ──────────
 function generarPDF(mes, proveedores, data, catColors) {
   const categorias = [...new Set(proveedores.map(p => p.categoria))];
   const totalMes = proveedores.reduce((s, p) => s + (data[p.id]?.[mes] || 0), 0);
   const fecha = new Date().toLocaleDateString("es-CL");
 
-  // Construimos el HTML del informe
   let rowsHTML = "";
   categorias.forEach(cat => {
     const provsCat = proveedores.filter(p => p.categoria === cat);
@@ -134,7 +134,6 @@ function generarPDF(mes, proveedores, data, catColors) {
       <div class="total-value">$${fmtNum(totalMes)}</div>
     </div>
   </div>
-
   <table>
     <thead>
       <tr>
@@ -151,13 +150,11 @@ function generarPDF(mes, proveedores, data, catColors) {
       </tr>
     </tbody>
   </table>
-
   <div class="footer">Generado el ${fecha} · Control de Cuentas del Hogar 2026</div>
 </div>
 </body>
 </html>`;
 
-  // Abrir en nueva ventana y lanzar impresión/guardar como PDF
   const win = window.open("", "_blank");
   win.document.write(html);
   win.document.close();
@@ -184,7 +181,6 @@ export default function App() {
   const [newCat, setNewCat] = useState("");
   const [newCatCustom, setNewCatCustom] = useState("");
   const [modalError, setModalError] = useState("");
-  // Modal proveedor desconocido
   const [showNuevoProvModal, setShowNuevoProvModal] = useState(false);
   const [pendingResult, setPendingResult] = useState(null);
   const [npNombre, setNpNombre] = useState("");
@@ -200,6 +196,18 @@ export default function App() {
   const mesesTabla = MESES.map((_, i) => i).filter(i =>
     proveedores.some(p => data[p.id]?.[i]) || i === mesActivo
   );
+
+  // ── PREPARAR DATOS PARA EL GRÁFICO ──
+  const chartData = mesesTabla.map(mi => {
+    const item = { name: MESES[mi] };
+    categorias.forEach(cat => {
+      const totalCat = proveedores
+        .filter(p => p.categoria === cat)
+        .reduce((sum, p) => sum + (data[p.id]?.[mi] || 0), 0);
+      item[cat] = totalCat;
+    });
+    return item;
+  });
 
   const agregarProveedor = () => {
     const nombre = newNombre.trim();
@@ -251,7 +259,6 @@ export default function App() {
         setData(prev => ({ ...prev, [result.proveedor_id]: { ...prev[result.proveedor_id], [result.mes]: result.monto } }));
         setMesActivo(result.mes);
       } else if (!result.proveedor_id && result.monto && result.mes != null) {
-        // Proveedor desconocido — abrir modal para crearlo
         setPendingResult(result);
         setNpNombre(result.proveedor_nombre || "");
         setNpCat(""); setNpCatCustom("");
@@ -306,18 +313,14 @@ export default function App() {
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f0f4f8", minHeight: "100vh", paddingBottom: 60 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* ── MODAL AGREGAR ── */}
+      {/* ── MODALS (Omitidos para no hacer el código gigante, aquí siguen igual) ── */}
       {showModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
-          onClick={() => setShowModal(false)}>
-          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 360, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
-            onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowModal(false)}>
+          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 360, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: "0 0 4px", fontSize: 17, color: "#1a3a5c", fontWeight: 700 }}>Agregar proveedor</h3>
             <p style={{ margin: "0 0 18px", color: "#999", fontSize: 13 }}>Aparecerá en todas las vistas y meses</p>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Nombre del proveedor</div>
-            <input value={newNombre} onChange={e => setNewNombre(e.target.value)}
-              placeholder="Ej: Seguro Mapfre" style={inputSt} autoFocus
-              onKeyDown={e => e.key === "Enter" && agregarProveedor()} />
+            <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Ej: Seguro Mapfre" style={inputSt} autoFocus onKeyDown={e => e.key === "Enter" && agregarProveedor()} />
             <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Categoría</div>
             <select value={newCat} onChange={e => setNewCat(e.target.value)} style={inputSt}>
               <option value="">— Seleccionar —</option>
@@ -325,70 +328,43 @@ export default function App() {
               <option value="__nueva__">＋ Nueva categoría</option>
             </select>
             {newCat === "__nueva__" && <>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Nombre de la nueva categoría</div>
-              <input value={newCatCustom} onChange={e => setNewCatCustom(e.target.value)}
-                placeholder="Ej: Seguros" style={inputSt} />
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Nombre nueva categoría</div>
+              <input value={newCatCustom} onChange={e => setNewCatCustom(e.target.value)} placeholder="Ej: Seguros" style={inputSt} />
             </>}
             {modalError && <p style={{ color: "#c62828", fontSize: 12, margin: "10px 0 0" }}>⚠ {modalError}</p>}
             <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-              <button onClick={() => { setShowModal(false); setModalError(""); }} style={{
-                flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8,
-                background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666",
-              }}>Cancelar</button>
-              <button onClick={agregarProveedor} style={{
-                flex: 2, padding: 10, border: "none", borderRadius: 8,
-                background: "#1a3a5c", color: "white", cursor: "pointer",
-                fontFamily: "inherit", fontSize: 13, fontWeight: 700,
-              }}>Agregar</button>
+              <button onClick={() => { setShowModal(false); setModalError(""); }} style={{ flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666" }}>Cancelar</button>
+              <button onClick={agregarProveedor} style={{ flex: 2, padding: 10, border: "none", borderRadius: 8, background: "#1a3a5c", color: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}>Agregar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL PROVEEDOR DESCONOCIDO ── */}
       {showNuevoProvModal && pendingResult && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001 }}
-          onClick={() => setShowNuevoProvModal(false)}>
-          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
-            onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001 }} onClick={() => setShowNuevoProvModal(false)}>
+          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
             <h3 style={{ margin: "0 0 4px", fontSize: 17, color: "#1a3a5c", fontWeight: 700 }}>Proveedor no reconocido</h3>
             <p style={{ margin: "0 0 16px", color: "#888", fontSize: 13 }}>
-              La IA leyó <strong style={{color:"#1a3a5c"}}>{pendingResult.proveedor_nombre}</strong> por <strong style={{color:"#1a3a5c"}}>${Number(pendingResult.monto).toLocaleString("es-CL")}</strong> en <strong style={{color:"#1a3a5c"}}>{MESES[pendingResult.mes]}</strong>.
-              ¿Quieres crearlo como nuevo proveedor?
+              La IA leyó <strong style={{color:"#1a3a5c"}}>{pendingResult.proveedor_nombre}</strong> por <strong style={{color:"#1a3a5c"}}>${Number(pendingResult.monto).toLocaleString("es-CL")}</strong> en <strong style={{color:"#1a3a5c"}}>{MESES[pendingResult.mes]}</strong>. ¿Crearlo?
             </p>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Nombre del proveedor</div>
-            <input value={npNombre} onChange={e => setNpNombre(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #dde3ea", borderRadius: 8, fontFamily: "inherit", fontSize: 13, outline: "none", boxSizing: "border-box", color: "#333", marginBottom: 14 }} />
+            <input value={npNombre} onChange={e => setNpNombre(e.target.value)} style={{ ...inputSt, marginBottom: 14 }} />
             <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Categoría</div>
-            <select value={npCat} onChange={e => setNpCat(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #dde3ea", borderRadius: 8, fontFamily: "inherit", fontSize: 13, outline: "none", boxSizing: "border-box", color: "#333" }}>
+            <select value={npCat} onChange={e => setNpCat(e.target.value)} style={inputSt}>
               <option value="">— Seleccionar —</option>
               {[...new Set(proveedores.map(p => p.categoria))].map(c => <option key={c} value={c}>{c}</option>)}
               <option value="__nueva__">＋ Nueva categoría</option>
             </select>
             {npCat === "__nueva__" && (
               <>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Nombre de la nueva categoría</div>
-                <input value={npCatCustom} onChange={e => setNpCatCustom(e.target.value)}
-                  placeholder="Ej: Supermercado"
-                  style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #dde3ea", borderRadius: 8, fontFamily: "inherit", fontSize: 13, outline: "none", boxSizing: "border-box", color: "#333" }} />
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Nombre nueva categoría</div>
+                <input value={npCatCustom} onChange={e => setNpCatCustom(e.target.value)} placeholder="Ej: Supermercado" style={inputSt} />
               </>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-              <button onClick={() => setShowNuevoProvModal(false)} style={{
-                flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8,
-                background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666",
-              }}>Omitir</button>
-              <button
-                onClick={confirmarNuevoProv}
-                disabled={!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())}
-                style={{
-                  flex: 2, padding: 10, border: "none", borderRadius: 8, cursor: "pointer",
-                  fontFamily: "inherit", fontSize: 13, fontWeight: 700,
-                  background: (!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())) ? "#ccc" : "#1a3a5c",
-                  color: "white",
-              }}>Crear y registrar</button>
+              <button onClick={() => setShowNuevoProvModal(false)} style={{ flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666" }}>Omitir</button>
+              <button onClick={confirmarNuevoProv} disabled={!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())} style={{ flex: 2, padding: 10, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, background: (!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())) ? "#ccc" : "#1a3a5c", color: "white" }}>Crear y registrar</button>
             </div>
           </div>
         </div>
@@ -401,24 +377,13 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>Cuentas del Hogar 2026</h1>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setShowModal(true)} style={btnHeader}>
-                <span style={{ fontSize: 16 }}>＋</span> Agregar proveedor
-              </button>
-              <button
-                onClick={() => generarPDF(mesActivo, proveedores, data, catColors)}
-                style={{ ...btnHeader, background: "rgba(255,255,255,0.18)", border: "1.5px solid rgba(255,255,255,0.5)" }}
-              >
-                <span style={{ fontSize: 16 }}>⬇</span> Informe {MESES[mesActivo]}
-              </button>
+              <button onClick={() => setShowModal(true)} style={btnHeader}><span style={{ fontSize: 16 }}>＋</span> Agregar proveedor</button>
+              <button onClick={() => generarPDF(mesActivo, proveedores, data, catColors)} style={{ ...btnHeader, background: "rgba(255,255,255,0.18)", border: "1.5px solid rgba(255,255,255,0.5)" }}><span style={{ fontSize: 16 }}>⬇</span> Informe {MESES[mesActivo]}</button>
             </div>
           </div>
           <div style={{ display: "flex", gap: 14, marginTop: 20, flexWrap: "wrap" }}>
             {mesesConDatos.filter(m => m.total > 0).map(m => (
-              <div key={m.idx} onClick={() => setMesActivo(m.idx)} style={{
-                background: m.idx === mesActivo ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)",
-                border: m.idx === mesActivo ? "1px solid rgba(255,255,255,0.5)" : "1px solid transparent",
-                borderRadius: 10, padding: "10px 18px", cursor: "pointer",
-              }}>
+              <div key={m.idx} onClick={() => setMesActivo(m.idx)} style={{ background: m.idx === mesActivo ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)", border: m.idx === mesActivo ? "1px solid rgba(255,255,255,0.5)" : "1px solid transparent", borderRadius: 10, padding: "10px 18px", cursor: "pointer" }}>
                 <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 2 }}>{m.nombre}</div>
                 <div style={{ fontSize: 17, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>{fmt(m.total)}</div>
               </div>
@@ -430,20 +395,8 @@ export default function App() {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 0" }}>
 
         {/* ── UPLOAD ── */}
-        <div
-          onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onClick={() => !uploading && fileRef.current.click()}
-          style={{
-            border: `2px dashed ${dragOver ? "#1565c0" : "#b0c4de"}`,
-            borderRadius: 14, background: dragOver ? "#e3f2fd" : "white",
-            padding: "22px", cursor: uploading ? "default" : "pointer",
-            marginBottom: 20, display: "flex", alignItems: "center",
-            gap: 20, justifyContent: "center", flexWrap: "wrap", transition: "all 0.2s",
-          }}>
-          <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
-            onChange={e => e.target.files[0] && processFile(e.target.files[0])} />
+        <div onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onClick={() => !uploading && fileRef.current.click()} style={{ border: `2px dashed ${dragOver ? "#1565c0" : "#b0c4de"}`, borderRadius: 14, background: dragOver ? "#e3f2fd" : "white", padding: "22px", cursor: uploading ? "default" : "pointer", marginBottom: 20, display: "flex", alignItems: "center", gap: 20, justifyContent: "center", flexWrap: "wrap", transition: "all 0.2s" }}>
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={e => e.target.files[0] && processFile(e.target.files[0])} />
           {uploading ? (
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 28, height: 28, border: "3px solid #e3f2fd", borderTop: "3px solid #1565c0", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -459,28 +412,16 @@ export default function App() {
             </>
           )}
           {uploadResult && !uploading && (
-            <div style={{
-              background: uploadResult.error ? "#ffebee" : "#e8f5e9",
-              border: `1px solid ${uploadResult.error ? "#ef9a9a" : "#a5d6a7"}`,
-              borderRadius: 10, padding: "9px 16px", fontSize: 13,
-              color: uploadResult.error ? "#c62828" : "#2e7d32",
-            }}>
-              {uploadResult.error ? `❌ ${uploadResult.error}` :
-                <span>✅ <strong>{uploadResult.proveedor_nombre}</strong> — {fmt(uploadResult.monto)} en <strong>{MESES[uploadResult.mes]}</strong>{uploadResult.confianza === "baja" && <span style={{ color: "#f57f17" }}> (verificar)</span>}</span>}
+            <div style={{ background: uploadResult.error ? "#ffebee" : "#e8f5e9", border: `1px solid ${uploadResult.error ? "#ef9a9a" : "#a5d6a7"}`, borderRadius: 10, padding: "9px 16px", fontSize: 13, color: uploadResult.error ? "#c62828" : "#2e7d32" }}>
+              {uploadResult.error ? `❌ ${uploadResult.error}` : <span>✅ <strong>{uploadResult.proveedor_nombre}</strong> — {fmt(uploadResult.monto)} en <strong>{MESES[uploadResult.mes]}</strong>{uploadResult.confianza === "baja" && <span style={{ color: "#f57f17" }}> (verificar)</span>}</span>}
             </div>
           )}
         </div>
 
         {/* ── TABS ── */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["tabla", "📋 Tabla mensual"], ["comparar", "📊 Comparar meses"]].map(([v, label]) => (
-            <button key={v} onClick={() => setVista(v)} style={{
-              padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer",
-              fontFamily: "inherit", fontWeight: 600, fontSize: 13,
-              background: vista === v ? "#1a3a5c" : "white",
-              color: vista === v ? "white" : "#555",
-              boxShadow: vista === v ? "0 2px 8px rgba(26,58,92,0.2)" : "0 1px 3px rgba(0,0,0,0.08)",
-            }}>{label}</button>
+          {[["tabla", "📋 Tabla mensual"], ["comparar", "📊 Analizar y Comparar"]].map(([v, label]) => (
+            <button key={v} onClick={() => setVista(v)} style={{ padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, background: vista === v ? "#1a3a5c" : "white", color: vista === v ? "white" : "#555", boxShadow: vista === v ? "0 2px 8px rgba(26,58,92,0.2)" : "0 1px 3px rgba(0,0,0,0.08)" }}>{label}</button>
           ))}
         </div>
 
@@ -491,13 +432,7 @@ export default function App() {
               {MESES.map((m, i) => {
                 const hasData = proveedores.some(p => data[p.id]?.[i]);
                 return (
-                  <button key={i} onClick={() => setMesActivo(i)} style={{
-                    padding: "12px 13px", border: "none", background: "none", cursor: "pointer",
-                    fontFamily: "inherit", fontSize: 13, fontWeight: mesActivo === i ? 700 : 400,
-                    color: mesActivo === i ? "#1565c0" : hasData ? "#333" : "#bbb",
-                    borderBottom: mesActivo === i ? "3px solid #1565c0" : "3px solid transparent",
-                    whiteSpace: "nowrap",
-                  }}>
+                  <button key={i} onClick={() => setMesActivo(i)} style={{ padding: "12px 13px", border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: mesActivo === i ? 700 : 400, color: mesActivo === i ? "#1565c0" : hasData ? "#333" : "#bbb", borderBottom: mesActivo === i ? "3px solid #1565c0" : "3px solid transparent", whiteSpace: "nowrap" }}>
                     {m}{hasData && <span style={{ marginLeft: 5, display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#43a047", verticalAlign: "middle" }} />}
                   </button>
                 );
@@ -527,24 +462,12 @@ export default function App() {
                     const valPrev = prevMes !== null ? data[p.id]?.[prevMes] : null;
                     const isEditing = editCell === `${p.id}-${mesActivo}`;
                     return (
-                      <div key={p.id} onClick={() => !isEditing && startEdit(p.id, mesActivo, val)} style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "9px 20px", cursor: "pointer",
-                        background: pi % 2 === 0 ? "white" : "#fafbfc",
-                        borderBottom: "1px solid #f0f4f8",
-                      }}>
+                      <div key={p.id} onClick={() => !isEditing && startEdit(p.id, mesActivo, val)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 20px", cursor: "pointer", background: pi % 2 === 0 ? "white" : "#fafbfc", borderBottom: "1px solid #f0f4f8" }}>
                         <span style={{ fontSize: 13, color: "#333" }}>{p.nombre}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                           {valPrev > 0 && val > 0 && <span style={{ fontSize: 11, color: diffColor(val, valPrev) }}>{diffLabel(val, valPrev)}</span>}
                           {isEditing ? (
-                            <input autoFocus value={editVal}
-                              onChange={e => setEditVal(e.target.value)}
-                              onBlur={() => commitEdit(p.id, mesActivo)}
-                              onKeyDown={e => { if (e.key === "Enter") commitEdit(p.id, mesActivo); if (e.key === "Escape") setEditCell(null); }}
-                              onClick={e => e.stopPropagation()}
-                              placeholder="Ej: 183040"
-                              style={{ width: 130, padding: "4px 8px", border: "2px solid #1565c0", borderRadius: 6, fontFamily: "'DM Mono', monospace", fontSize: 13, textAlign: "right", outline: "none" }}
-                            />
+                            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} onBlur={() => commitEdit(p.id, mesActivo)} onKeyDown={e => { if (e.key === "Enter") commitEdit(p.id, mesActivo); if (e.key === "Escape") setEditCell(null); }} onClick={e => e.stopPropagation()} placeholder="Ej: 183040" style={{ width: 130, padding: "4px 8px", border: "2px solid #1565c0", borderRadius: 6, fontFamily: "'DM Mono', monospace", fontSize: 13, textAlign: "right", outline: "none" }} />
                           ) : (
                             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: val ? "#1a3a5c" : "#ccc", fontWeight: val ? 600 : 400, minWidth: 100, textAlign: "right" }}>
                               {val ? fmt(val) : "— editar"}
@@ -560,60 +483,86 @@ export default function App() {
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", background: "#0f2044", marginTop: 4 }}>
               <span style={{ color: "white", fontWeight: 700, fontSize: 14 }}>TOTAL {MESES[mesActivo].toUpperCase()}</span>
-              <span style={{ color: "white", fontWeight: 700, fontSize: 18, fontFamily: "'DM Mono', monospace" }}>
-                {fmt(proveedores.reduce((s, p) => s + (data[p.id]?.[mesActivo] || 0), 0))}
-              </span>
+              <span style={{ color: "white", fontWeight: 700, fontSize: 18, fontFamily: "'DM Mono', monospace" }}>{fmt(proveedores.reduce((s, p) => s + (data[p.id]?.[mesActivo] || 0), 0))}</span>
             </div>
           </div>
         )}
 
-        {/* ── COMPARAR MESES ── */}
+        {/* ── VISTA COMPARAR MESES (DASHBOARD) ── */}
         {vista === "comparar" && (
-          <div style={{ background: "white", borderRadius: 14, overflow: "auto", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: "#0f2044" }}>
-                  <th style={{ padding: "12px 16px", textAlign: "left", color: "white", fontWeight: 600, position: "sticky", left: 0, background: "#0f2044", minWidth: 200 }}>Proveedor</th>
-                  {mesesTabla.map(i => (
-                    <th key={i} style={{ padding: "12px 12px", color: "white", fontWeight: i === mesActivo ? 700 : 400, background: i === mesActivo ? "#1565c0" : "#0f2044", minWidth: 110, textAlign: "right" }}>{MESES[i]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {categorias.map(cat => {
-                  const provsCat = proveedores.filter(p => p.categoria === cat);
-                  const colors = catColors[cat] || PALETTE[0];
-                  return [
-                    <tr key={`h-${cat}`} style={{ background: colors.bg }}>
-                      <td colSpan={mesesTabla.length + 1} style={{ padding: "7px 16px", fontSize: 11, fontWeight: 700, color: colors.accent, letterSpacing: 1, textTransform: "uppercase" }}>● {cat}</td>
-                    </tr>,
-                    ...provsCat.map((p, pi) => (
-                      <tr key={p.id} style={{ background: pi % 2 === 0 ? "white" : "#fafbfc" }}>
-                        <td style={{ padding: "9px 16px", color: "#333", fontWeight: 500, position: "sticky", left: 0, background: pi % 2 === 0 ? "white" : "#fafbfc", borderRight: "1px solid #e8edf2" }}>{p.nombre}</td>
-                        {mesesTabla.map((mi, idx) => {
-                          const val = data[p.id]?.[mi];
-                          const prevVal = idx > 0 ? data[p.id]?.[mesesTabla[idx - 1]] : null;
-                          return (
-                            <td key={mi} style={{ padding: "9px 12px", textAlign: "right", background: mi === mesActivo ? "#f0f7ff" : "inherit", fontFamily: "'DM Mono', monospace" }}>
-                              <div style={{ color: val ? "#1a3a5c" : "#ddd", fontWeight: val ? 600 : 400 }}>{val ? fmt(val) : "—"}</div>
-                              {val && prevVal && <div style={{ fontSize: 10, color: diffColor(val, prevVal), marginTop: 1 }}>{diffLabel(val, prevVal)}</div>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))
-                  ];
-                })}
-                <tr style={{ background: "#0f2044" }}>
-                  <td style={{ padding: "12px 16px", color: "white", fontWeight: 700, position: "sticky", left: 0, background: "#0f2044" }}>TOTAL</td>
-                  {mesesTabla.map(mi => (
-                    <td key={mi} style={{ padding: "12px 12px", textAlign: "right", color: "white", fontWeight: 700, fontFamily: "'DM Mono', monospace", fontSize: 13, background: mi === mesActivo ? "#1565c0" : "#0f2044" }}>
-                      {fmt(proveedores.reduce((s, p) => s + (data[p.id]?.[mi] || 0), 0))}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            
+            {/* GRÁFICO */}
+            <div style={{ background: "white", borderRadius: 14, padding: "24px 24px 10px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+              <h3 style={{ marginTop: 0, color: "#1a3a5c", marginBottom: 20, fontSize: 16 }}>Evolución de Gastos por Categoría</h3>
+              <div style={{ width: '100%', height: 350 }}>
+                <ResponsiveContainer>
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8edf2" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 12 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 12 }} tickFormatter={(val) => `$${val.toLocaleString("es-CL")}`} width={80} />
+                    <Tooltip 
+                      formatter={(value, name) => [`$${Number(value).toLocaleString("es-CL")}`, name]}
+                      cursor={{ fill: 'rgba(26,58,92,0.04)' }}
+                      contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", fontSize: 13 }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: 20, fontSize: 13 }} />
+                    {categorias.map((cat, idx) => {
+                      const colors = catColors[cat] || PALETTE[idx % PALETTE.length];
+                      return <Bar key={cat} dataKey={cat} stackId="a" fill={colors.accent} />
+                    })}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* TABLA COMPARATIVA */}
+            <div style={{ background: "white", borderRadius: 14, overflow: "auto", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: "#0f2044" }}>
+                    <th style={{ padding: "12px 16px", textAlign: "left", color: "white", fontWeight: 600, position: "sticky", left: 0, background: "#0f2044", minWidth: 200, zIndex: 10 }}>Proveedor</th>
+                    {mesesTabla.map(i => (
+                      <th key={i} style={{ padding: "12px 12px", color: "white", fontWeight: i === mesActivo ? 700 : 400, background: i === mesActivo ? "#1565c0" : "#0f2044", minWidth: 110, textAlign: "right" }}>{MESES[i]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {categorias.map(cat => {
+                    const provsCat = proveedores.filter(p => p.categoria === cat);
+                    const colors = catColors[cat] || PALETTE[0];
+                    return [
+                      <tr key={`h-${cat}`} style={{ background: colors.bg }}>
+                        <td colSpan={mesesTabla.length + 1} style={{ padding: "7px 16px", fontSize: 11, fontWeight: 700, color: colors.accent, letterSpacing: 1, textTransform: "uppercase" }}>● {cat}</td>
+                      </tr>,
+                      ...provsCat.map((p, pi) => (
+                        <tr key={p.id} style={{ background: pi % 2 === 0 ? "white" : "#fafbfc" }}>
+                          <td style={{ padding: "9px 16px", color: "#333", fontWeight: 500, position: "sticky", left: 0, background: pi % 2 === 0 ? "white" : "#fafbfc", borderRight: "1px solid #e8edf2" }}>{p.nombre}</td>
+                          {mesesTabla.map((mi, idx) => {
+                            const val = data[p.id]?.[mi];
+                            const prevVal = idx > 0 ? data[p.id]?.[mesesTabla[idx - 1]] : null;
+                            return (
+                              <td key={mi} style={{ padding: "9px 12px", textAlign: "right", background: mi === mesActivo ? "#f0f7ff" : "inherit", fontFamily: "'DM Mono', monospace" }}>
+                                <div style={{ color: val ? "#1a3a5c" : "#ddd", fontWeight: val ? 600 : 400 }}>{val ? fmt(val) : "—"}</div>
+                                {val && prevVal && <div style={{ fontSize: 10, color: diffColor(val, prevVal), marginTop: 1 }}>{diffLabel(val, prevVal)}</div>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    ];
+                  })}
+                  <tr style={{ background: "#0f2044" }}>
+                    <td style={{ padding: "12px 16px", color: "white", fontWeight: 700, position: "sticky", left: 0, background: "#0f2044" }}>TOTAL</td>
+                    {mesesTabla.map(mi => (
+                      <td key={mi} style={{ padding: "12px 12px", textAlign: "right", color: "white", fontWeight: 700, fontFamily: "'DM Mono', monospace", fontSize: 13, background: mi === mesActivo ? "#1565c0" : "#0f2044" }}>
+                        {fmt(proveedores.reduce((s, p) => s + (data[p.id]?.[mi] || 0), 0))}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
