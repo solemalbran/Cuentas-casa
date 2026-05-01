@@ -1,6 +1,6 @@
 # Control de Cuentas de la Casa
 
-App para controlar gastos mensuales del hogar con lectura automática de comprobantes via IA.
+App para controlar gastos mensuales de la casa con lectura automática de comprobantes via IA.
 
 ## Subir a Vercel
 
