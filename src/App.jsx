@@ -139,6 +139,14 @@ export default function App() {
   const [npCatCustom, setNpCatCustom] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState("");
+  // Editar/Eliminar proveedor
+  const [showEditProv, setShowEditProv] = useState(false);
+  const [editProv, setEditProv] = useState(null);
+  const [editProvNombre, setEditProvNombre] = useState("");
+  const [editProvCat, setEditProvCat] = useState("");
+  const [editProvCatCustom, setEditProvCatCustom] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteProv, setDeleteProv] = useState(null);
   const fileRef = useRef();
 
   // ── Cargar datos de Supabase al inicio ──────────────────────
@@ -357,6 +365,66 @@ export default function App() {
     setEditCell(null);
   };
 
+  const abrirEditProv = (p, e) => {
+    e.stopPropagation();
+    setEditProv(p);
+    setEditProvNombre(p.nombre);
+    setEditProvCat(p.categoria);
+    setEditProvCatCustom("");
+    setShowEditProv(true);
+  };
+
+  const guardarEditProv = async () => {
+    if (!editProv || !editProvNombre.trim()) return;
+    const newCatVal = editProvCat === "__nueva__" ? editProvCatCustom.trim() : editProvCat;
+    if (!newCatVal) return;
+    const nombre = editProvNombre.trim();
+    try {
+      setSyncStatus("...");
+      // Actualizar en Supabase
+      await fetch(`${SUPABASE_URL}/rest/v1/proveedores?id=eq.${editProv.id}`, {
+        method: "PATCH",
+        headers: sbHeaders,
+        body: JSON.stringify({ nombre, categoria: newCatVal })
+      });
+      // Si categoría nueva, agregar color
+      let newColor = null;
+      if (!catColors[newCatVal]) {
+        newColor = PALETTE[Object.keys(catColors).length % PALETTE.length];
+        setCatColors(prev => ({ ...prev, [newCatVal]: newColor }));
+        await sbFetch("cat_colors", "POST", [{ categoria: newCatVal, ...newColor }]);
+      }
+      // Actualizar estado local
+      setProveedores(prev => prev.map(p => p.id === editProv.id ? { ...p, nombre, categoria: newCatVal } : p));
+      setSyncStatus("✓");
+    } catch { setSyncStatus("⚠"); }
+    setShowEditProv(false);
+    setEditProv(null);
+  };
+
+  const abrirDeleteProv = (p, e) => {
+    e.stopPropagation();
+    setDeleteProv(p);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmarDeleteProv = async () => {
+    if (!deleteProv) return;
+    try {
+      setSyncStatus("...");
+      // Eliminar gastos del proveedor en Supabase
+      await sbFetch("gastos", "DELETE", null, `?proveedor_id=eq.${deleteProv.id}`);
+      // Eliminar proveedor en Supabase
+      await sbFetch("proveedores", "DELETE", null, `?id=eq.${deleteProv.id}`);
+      // Actualizar estado local
+      setProveedores(prev => prev.filter(p => p.id !== deleteProv.id));
+      setData(prev => { const d = { ...prev }; delete d[deleteProv.id]; return d; });
+      setSyncStatus("✓");
+    } catch { setSyncStatus("⚠"); }
+    setShowDeleteConfirm(false);
+    setDeleteProv(null);
+  };
+
   const inputSt = {
     width: "100%", padding: "9px 12px", border: "1.5px solid #dde3ea",
     borderRadius: 8, fontFamily: "inherit", fontSize: 13, outline: "none",
@@ -439,6 +507,49 @@ export default function App() {
             <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
               <button onClick={() => setShowNuevoProvModal(false)} style={{ flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666" }}>Omitir</button>
               <button onClick={confirmarNuevoProv} disabled={!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())} style={{ flex: 2, padding: 10, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, background: (!npNombre.trim() || !npCat || (npCat === "__nueva__" && !npCatCustom.trim())) ? "#ccc" : "#1a3a5c", color: "white" }}>Crear y registrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL EDITAR PROVEEDOR ── */}
+      {showEditProv && editProv && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1002 }} onClick={() => setShowEditProv(false)}>
+          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 360, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17, color: "#1a3a5c", fontWeight: 700 }}>Editar proveedor</h3>
+            <p style={{ margin: "0 0 18px", color: "#999", fontSize: 13 }}>Modifica el nombre o la categoría</p>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 5 }}>Nombre</div>
+            <input value={editProvNombre} onChange={e => setEditProvNombre(e.target.value)} style={inputSt} autoFocus onKeyDown={e => e.key === "Enter" && guardarEditProv()} />
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Categoría</div>
+            <select value={editProvCat} onChange={e => setEditProvCat(e.target.value)} style={inputSt}>
+              <option value="">— Seleccionar —</option>
+              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__nueva__">＋ Nueva categoría</option>
+            </select>
+            {editProvCat === "__nueva__" && <>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", margin: "14px 0 5px" }}>Nombre nueva categoría</div>
+              <input value={editProvCatCustom} onChange={e => setEditProvCatCustom(e.target.value)} placeholder="Ej: Seguros" style={inputSt} />
+            </>}
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button onClick={() => setShowEditProv(false)} style={{ flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666" }}>Cancelar</button>
+              <button onClick={guardarEditProv} style={{ flex: 2, padding: 10, border: "none", borderRadius: 8, background: "#1a3a5c", color: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL CONFIRMAR ELIMINAR ── */}
+      {showDeleteConfirm && deleteProv && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1002 }} onClick={() => setShowDeleteConfirm(false)}>
+          <div style={{ background: "white", borderRadius: 16, padding: 28, width: 340, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🗑️</div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 17, color: "#c62828", fontWeight: 700 }}>Eliminar proveedor</h3>
+            <p style={{ margin: "0 0 20px", color: "#666", fontSize: 13 }}>
+              ¿Estás segura de eliminar <strong>{deleteProv.nombre}</strong>? Se borrarán todos sus gastos registrados. Esta acción no se puede deshacer.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 10, border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: "#666" }}>Cancelar</button>
+              <button onClick={confirmarDeleteProv} style={{ flex: 2, padding: 10, border: "none", borderRadius: 8, background: "#c62828", color: "white", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700 }}>Eliminar</button>
             </div>
           </div>
         </div>
@@ -540,7 +651,11 @@ export default function App() {
                     const isEditing = editCell === `${p.id}-${mesActivo}`;
                     return (
                       <div key={p.id} onClick={() => !isEditing && startEdit(p.id, mesActivo, val)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 20px", cursor: "pointer", background: pi % 2 === 0 ? "white" : "#fafbfc", borderBottom: "1px solid #f0f4f8" }}>
-                        <span style={{ fontSize: 13, color: "#333" }}>{p.nombre}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, color: "#333" }}>{p.nombre}</span>
+                          <span onClick={e => abrirEditProv(p, e)} style={{ cursor: "pointer", fontSize: 12, opacity: 0.4, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity=1} onMouseLeave={e => e.target.style.opacity=0.4}>✏️</span>
+                          <span onClick={e => abrirDeleteProv(p, e)} style={{ cursor: "pointer", fontSize: 12, opacity: 0.4, transition: "opacity 0.2s" }} onMouseEnter={e => e.target.style.opacity=1} onMouseLeave={e => e.target.style.opacity=0.4}>🗑️</span>
+                        </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                           {valPrev > 0 && val > 0 && <span style={{ fontSize: 11, color: diffColor(val, valPrev) }}>{diffLabel(val, valPrev)}</span>}
                           {isEditing ? (
