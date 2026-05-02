@@ -1,6 +1,28 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
+// ── Supabase Config ──────────────────────────────────────────
+const SUPABASE_URL = "https://ekihewxoeycsnvmlkzfq.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVraWhld3hvZXljc252bWxremZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTgzNzgsImV4cCI6MjA5MzIzNDM3OH0.fcpjd5DKPoXPaM6jq3fIh4wfQomYj3YOWT5fbS3gEWo";
+
+const sbHeaders = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+  "Prefer": "return=minimal",
+};
+
+const sbFetch = async (table, method = "GET", body = null, query = "") => {
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
+  const opts = { method, headers: { ...sbHeaders } };
+  if (method === "GET") opts.headers["Prefer"] = undefined;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (method === "GET") return res.json();
+  return res;
+};
+
+// ── Datos iniciales ──────────────────────────────────────────
 const PROVEEDORES_INIT = [
   { id: "aguas", nombre: "Aguas Manquehue", categoria: "Servicios Básicos" },
   { id: "enel", nombre: "Enel", categoria: "Servicios Básicos" },
@@ -46,18 +68,6 @@ const ABRIL_DATA = {
   canopsa:       { 3: 9800 },
 };
 
-// ── Helpers de localStorage ──────────────────────────────────
-const loadStorage = (key, fallback) => {
-  try {
-    const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : fallback;
-  } catch { return fallback; }
-};
-
-const saveStorage = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-};
-
 const initData = () => {
   const d = {};
   PROVEEDORES_INIT.forEach(p => { d[p.id] = { ...(ABRIL_DATA[p.id] || {}) }; });
@@ -80,7 +90,7 @@ const diffLabel = (curr, prev) => {
   return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%`;
 };
 
-// ── Genera y descarga el PDF usando solo el browser ──────────
+// ── Genera y descarga el PDF ──────────────────────────────────
 function generarPDF(mes, proveedores, data, catColors) {
   const categorias = [...new Set(proveedores.map(p => p.categoria))];
   const totalMes = proveedores.reduce((s, p) => s + (data[p.id]?.[mes] || 0), 0);
@@ -92,87 +102,14 @@ function generarPDF(mes, proveedores, data, catColors) {
     const totalCat = provsCat.reduce((s, p) => s + (data[p.id]?.[mes] || 0), 0);
     const colors = catColors[cat] || PALETTE[0];
     const hayDatos = provsCat.some(p => data[p.id]?.[mes]);
-
-    rowsHTML += `
-      <tr class="cat-header">
-        <td colspan="2" style="background:${colors.bg};color:${colors.pdf};padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-top:2px solid ${colors.pdf}22;">
-          ● ${cat}
-        </td>
-        <td style="background:${colors.bg};color:${colors.pdf};padding:10px 16px;text-align:right;font-weight:700;font-size:13px;border-top:2px solid ${colors.pdf}22;">
-          ${hayDatos ? "$" + fmtNum(totalCat) : "—"}
-        </td>
-      </tr>`;
-
+    rowsHTML += `<tr><td colspan="2" style="background:${colors.bg};color:${colors.pdf};padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border-top:2px solid ${colors.pdf}22;">● ${cat}</td><td style="background:${colors.bg};color:${colors.pdf};padding:10px 16px;text-align:right;font-weight:700;font-size:13px;border-top:2px solid ${colors.pdf}22;">${hayDatos ? "$" + fmtNum(totalCat) : "—"}</td></tr>`;
     provsCat.forEach((p, pi) => {
       const val = data[p.id]?.[mes];
-      rowsHTML += `
-        <tr style="background:${pi % 2 === 0 ? "#fff" : "#fafbfc"}">
-          <td style="padding:9px 16px 9px 28px;color:#555;font-size:12px;border-bottom:1px solid #f0f0f0;">—</td>
-          <td style="padding:9px 16px;color:#222;font-size:13px;border-bottom:1px solid #f0f0f0;">${p.nombre}</td>
-          <td style="padding:9px 16px;text-align:right;font-size:13px;color:${val ? "#1a3a5c" : "#ccc"};font-weight:${val ? 600 : 400};border-bottom:1px solid #f0f0f0;font-family:monospace;">
-            ${val ? "$" + fmtNum(val) : "—"}
-          </td>
-        </tr>`;
+      rowsHTML += `<tr style="background:${pi % 2 === 0 ? "#fff" : "#fafbfc"}"><td style="padding:9px 16px 9px 28px;color:#555;font-size:12px;border-bottom:1px solid #f0f0f0;">—</td><td style="padding:9px 16px;color:#222;font-size:13px;border-bottom:1px solid #f0f0f0;">${p.nombre}</td><td style="padding:9px 16px;text-align:right;font-size:13px;color:${val ? "#1a3a5c" : "#ccc"};font-weight:${val ? 600 : 400};border-bottom:1px solid #f0f0f0;font-family:monospace;">${val ? "$" + fmtNum(val) : "—"}</td></tr>`;
     });
   });
 
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Informe ${MESES[mes]} 2026</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #222; }
-  .page { max-width: 680px; margin: 0 auto; padding: 40px 40px 60px; }
-  .header { background: linear-gradient(135deg, #0f2044, #1565c0); color: white; padding: 32px 36px; border-radius: 12px; margin-bottom: 32px; }
-  .header h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-  .header p { font-size: 12px; opacity: 0.7; letter-spacing: 1px; text-transform: uppercase; }
-  .header .total-box { margin-top: 20px; background: rgba(255,255,255,0.15); border-radius: 8px; padding: 14px 20px; display: inline-block; }
-  .header .total-label { font-size: 11px; opacity: 0.8; }
-  .header .total-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; font-family: monospace; }
-  table { width: 100%; border-collapse: collapse; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-  th { background: #0f2044; color: white; padding: 12px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
-  th:last-child { text-align: right; }
-  .total-row td { background: #0f2044; color: white; font-weight: 700; font-size: 14px; padding: 14px 16px; }
-  .total-row td:last-child { text-align: right; font-size: 16px; font-family: monospace; }
-  .footer { margin-top: 28px; text-align: center; font-size: 11px; color: #aaa; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="header">
-    <p>Control de Cuentas Casa</p>
-    <h1>Informe de Gastos — ${MESES[mes]} 2026</h1>
-    <div class="total-box">
-      <div class="total-label">Total del mes</div>
-      <div class="total-value">$${fmtNum(totalMes)}</div>
-    </div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:30px"></th>
-        <th style="text-align:left">Proveedor</th>
-        <th style="text-align:right">Monto</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHTML}
-      <tr class="total-row">
-        <td colspan="2">TOTAL ${MESES[mes].toUpperCase()} 2026</td>
-        <td>$${fmtNum(totalMes)}</td>
-      </tr>
-    </tbody>
-  </table>
-  <div class="footer">Generado el ${fecha} · Control de Cuentas Casa 2026</div>
-</div>
-</body>
-</html>`;
-
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe ${MESES[mes]} 2026</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222}.page{max-width:680px;margin:0 auto;padding:40px 40px 60px}.header{background:linear-gradient(135deg,#0f2044,#1565c0);color:white;padding:32px 36px;border-radius:12px;margin-bottom:32px}.header h1{font-size:22px;font-weight:700;margin-bottom:4px}.header p{font-size:12px;opacity:.7;letter-spacing:1px;text-transform:uppercase}.header .total-box{margin-top:20px;background:rgba(255,255,255,.15);border-radius:8px;padding:14px 20px;display:inline-block}.header .total-label{font-size:11px;opacity:.8}.header .total-value{font-size:28px;font-weight:800;letter-spacing:-1px;font-family:monospace}table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)}th{background:#0f2044;color:white;padding:12px 16px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}th:last-child{text-align:right}.total-row td{background:#0f2044;color:white;font-weight:700;font-size:14px;padding:14px 16px}.total-row td:last-child{text-align:right;font-size:16px;font-family:monospace}.footer{margin-top:28px;text-align:center;font-size:11px;color:#aaa}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="page"><div class="header"><p>Control de Cuentas Casa</p><h1>Informe de Gastos — ${MESES[mes]} 2026</h1><div class="total-box"><div class="total-label">Total del mes</div><div class="total-value">$${fmtNum(totalMes)}</div></div></div><table><thead><tr><th style="width:30px"></th><th style="text-align:left">Proveedor</th><th style="text-align:right">Monto</th></tr></thead><tbody>${rowsHTML}<tr class="total-row"><td colspan="2">TOTAL ${MESES[mes].toUpperCase()} 2026</td><td>$${fmtNum(totalMes)}</td></tr></tbody></table><div class="footer">Generado el ${fecha} · Control de Cuentas Casa 2026</div></div></body></html>`;
   const win = window.open("", "_blank");
   win.document.write(html);
   win.document.close();
@@ -180,10 +117,9 @@ function generarPDF(mes, proveedores, data, catColors) {
 }
 
 export default function App() {
-  // ── Estado con localStorage ──────────────────────────────────
-  const [proveedores, setProveedores] = useState(() => loadStorage('cc_proveedores', PROVEEDORES_INIT));
-  const [catColors, setCatColors] = useState(() => loadStorage('cc_catColors', CAT_COLORS_INIT));
-  const [data, setData] = useState(() => loadStorage('cc_data', initData()));
+  const [proveedores, setProveedores] = useState(PROVEEDORES_INIT);
+  const [catColors, setCatColors] = useState(CAT_COLORS_INIT);
+  const [data, setData] = useState(initData);
   const [mesActivo, setMesActivo] = useState(3);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
@@ -201,12 +137,112 @@ export default function App() {
   const [npNombre, setNpNombre] = useState("");
   const [npCat, setNpCat] = useState("");
   const [npCatCustom, setNpCatCustom] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState("");
   const fileRef = useRef();
 
-  // ── Guardar automáticamente cuando cambian los datos ──────────
-  useEffect(() => { saveStorage('cc_proveedores', proveedores); }, [proveedores]);
-  useEffect(() => { saveStorage('cc_catColors', catColors); }, [catColors]);
-  useEffect(() => { saveStorage('cc_data', data); }, [data]);
+  // ── Cargar datos de Supabase al inicio ──────────────────────
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      try {
+        const [dbProvs, dbGastos, dbColors] = await Promise.all([
+          sbFetch("proveedores", "GET"),
+          sbFetch("gastos", "GET"),
+          sbFetch("cat_colors", "GET"),
+        ]);
+
+        if (dbProvs.length > 0) {
+          setProveedores(dbProvs.map(p => ({ id: p.id, nombre: p.nombre, categoria: p.categoria })));
+        } else {
+          // Primera vez: cargar datos iniciales a Supabase
+          await seedDatabase();
+          setLoading(false);
+          return;
+        }
+
+        if (dbColors.length > 0) {
+          const colorsMap = {};
+          dbColors.forEach(c => { colorsMap[c.categoria] = { bg: c.bg, accent: c.accent, dot: c.dot, pdf: c.pdf }; });
+          setCatColors(colorsMap);
+        }
+
+        if (dbGastos.length > 0) {
+          const dataMap = {};
+          const provIds = dbProvs.length > 0 ? dbProvs.map(p => p.id) : PROVEEDORES_INIT.map(p => p.id);
+          provIds.forEach(id => { dataMap[id] = {}; });
+          dbGastos.forEach(g => {
+            if (!dataMap[g.proveedor_id]) dataMap[g.proveedor_id] = {};
+            dataMap[g.proveedor_id][g.mes] = g.monto;
+          });
+          setData(dataMap);
+        }
+
+        setSyncStatus("✓");
+      } catch (err) {
+        console.error("Error cargando de Supabase:", err);
+        setSyncStatus("⚠");
+      }
+      setLoading(false);
+    };
+
+    const seedDatabase = async () => {
+      try {
+        // Insertar proveedores iniciales
+        await sbFetch("proveedores", "POST", PROVEEDORES_INIT);
+
+        // Insertar colores iniciales
+        const colorsArr = Object.entries(CAT_COLORS_INIT).map(([cat, c]) => ({
+          categoria: cat, bg: c.bg, accent: c.accent, dot: c.dot, pdf: c.pdf
+        }));
+        await sbFetch("cat_colors", "POST", colorsArr);
+
+        // Insertar gastos de Abril
+        const gastosArr = [];
+        Object.entries(ABRIL_DATA).forEach(([provId, meses]) => {
+          Object.entries(meses).forEach(([mes, monto]) => {
+            gastosArr.push({ proveedor_id: provId, mes: parseInt(mes), monto });
+          });
+        });
+        await sbFetch("gastos", "POST", gastosArr);
+
+        setSyncStatus("✓");
+      } catch (err) {
+        console.error("Error inicializando DB:", err);
+        setSyncStatus("⚠");
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
+
+  // ── Funciones de sincronización ────────────────────────────
+  const syncGasto = async (provId, mes, monto) => {
+    try {
+      setSyncStatus("...");
+      if (monto) {
+        await sbFetch("gastos", "POST", [{ proveedor_id: provId, mes, monto }],
+          `?on_conflict=proveedor_id,mes`);
+        // Upsert usando DELETE + INSERT
+        await sbFetch("gastos", "DELETE", null, `?proveedor_id=eq.${provId}&mes=eq.${mes}`);
+        await sbFetch("gastos", "POST", [{ proveedor_id: provId, mes, monto }]);
+      } else {
+        await sbFetch("gastos", "DELETE", null, `?proveedor_id=eq.${provId}&mes=eq.${mes}`);
+      }
+      setSyncStatus("✓");
+    } catch { setSyncStatus("⚠"); }
+  };
+
+  const syncNuevoProveedor = async (prov, colorCat, catName) => {
+    try {
+      setSyncStatus("...");
+      await sbFetch("proveedores", "POST", [prov]);
+      if (colorCat) {
+        await sbFetch("cat_colors", "DELETE", null, `?categoria=eq.${encodeURIComponent(catName)}`);
+        await sbFetch("cat_colors", "POST", [{ categoria: catName, ...colorCat }]);
+      }
+      setSyncStatus("✓");
+    } catch { setSyncStatus("⚠"); }
+  };
 
   const categorias = [...new Set(proveedores.map(p => p.categoria))];
   const mesesConDatos = MESES.map((m, i) => ({
@@ -217,7 +253,6 @@ export default function App() {
     proveedores.some(p => data[p.id]?.[i]) || i === mesActivo
   );
 
-  // ── PREPARAR DATOS PARA EL GRÁFICO ──
   const chartData = mesesTabla.map(mi => {
     const item = { name: MESES[mi] };
     categorias.forEach(cat => {
@@ -237,12 +272,15 @@ export default function App() {
     if (proveedores.some(p => p.nombre.toLowerCase() === nombre.toLowerCase()))
       return setModalError("Ya existe un proveedor con ese nombre.");
     const id = nombre.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now();
+    let newColor = null;
     if (!catColors[categoria]) {
-      const color = PALETTE[Object.keys(catColors).length % PALETTE.length];
-      setCatColors(prev => ({ ...prev, [categoria]: color }));
+      newColor = PALETTE[Object.keys(catColors).length % PALETTE.length];
+      setCatColors(prev => ({ ...prev, [categoria]: newColor }));
     }
-    setProveedores(prev => [...prev, { id, nombre, categoria }]);
+    const prov = { id, nombre, categoria };
+    setProveedores(prev => [...prev, prov]);
     setData(prev => ({ ...prev, [id]: {} }));
+    syncNuevoProveedor(prov, newColor, categoria);
     setNewNombre(""); setNewCat(""); setNewCatCustom(""); setModalError("");
     setShowModal(false);
   };
@@ -277,6 +315,7 @@ export default function App() {
       setUploadResult({ ...result, fileName: file.name });
       if (result.proveedor_id && result.monto && result.mes != null) {
         setData(prev => ({ ...prev, [result.proveedor_id]: { ...prev[result.proveedor_id], [result.mes]: result.monto } }));
+        syncGasto(result.proveedor_id, result.mes, result.monto);
         setMesActivo(result.mes);
       } else if (!result.proveedor_id && result.monto && result.mes != null) {
         setPendingResult(result);
@@ -294,15 +333,16 @@ export default function App() {
     const categoria = npCat === "__nueva__" ? npCatCustom.trim() : npCat;
     if (!nombre || !categoria) return;
     const id = nombre.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now();
+    let newColor = null;
     if (!catColors[categoria]) {
-      const color = PALETTE[Object.keys(catColors).length % PALETTE.length];
-      setCatColors(prev => ({ ...prev, [categoria]: color }));
+      newColor = PALETTE[Object.keys(catColors).length % PALETTE.length];
+      setCatColors(prev => ({ ...prev, [categoria]: newColor }));
     }
-    setProveedores(prev => [...prev, { id, nombre, categoria }]);
-    setData(prev => ({
-      ...prev,
-      [id]: { [pendingResult.mes]: pendingResult.monto }
-    }));
+    const prov = { id, nombre, categoria };
+    setProveedores(prev => [...prev, prov]);
+    setData(prev => ({ ...prev, [id]: { [pendingResult.mes]: pendingResult.monto } }));
+    syncNuevoProveedor(prov, newColor, categoria);
+    syncGasto(id, pendingResult.mes, pendingResult.monto);
     setMesActivo(pendingResult.mes);
     setShowNuevoProvModal(false);
     setPendingResult(null);
@@ -313,6 +353,7 @@ export default function App() {
   const commitEdit = (pId, mi) => {
     const val = parseInt(editVal.replace(/\D/g, "")) || undefined;
     setData(prev => ({ ...prev, [pId]: { ...prev[pId], [mi]: val } }));
+    syncGasto(pId, mi, val);
     setEditCell(null);
   };
 
@@ -328,6 +369,18 @@ export default function App() {
     background: "rgba(255,255,255,0.12)", color: "white", cursor: "pointer",
     fontFamily: "inherit", fontWeight: 600, fontSize: 13,
   };
+
+  // ── LOADING ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+        <div style={{ width: 40, height: 40, border: "4px solid #e3f2fd", borderTop: "4px solid #1565c0", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <span style={{ color: "#1a3a5c", fontWeight: 600, fontSize: 15 }}>Cargando datos...</span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f0f4f8", minHeight: "100vh", paddingBottom: 60 }}>
@@ -394,7 +447,10 @@ export default function App() {
       {/* ── HEADER ── */}
       <div style={{ background: "linear-gradient(135deg, #0f2044 0%, #1a3a5c 60%, #1565c0 100%)", padding: "32px 32px 28px", color: "white" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, opacity: 0.6, marginBottom: 6, textTransform: "uppercase" }}>Control de Gastos</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, letterSpacing: 3, opacity: 0.6, marginBottom: 6, textTransform: "uppercase" }}>
+            Control de Gastos
+            {syncStatus && <span style={{ fontSize: 14, opacity: 1 }}>{syncStatus === "✓" ? "☁️" : syncStatus === "..." ? "⏳" : "⚠️"}</span>}
+          </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>Cuentas Casa 2026</h1>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -509,11 +565,9 @@ export default function App() {
           </div>
         )}
 
-        {/* ── VISTA COMPARAR MESES (DASHBOARD) ── */}
+        {/* ── VISTA COMPARAR ── */}
         {vista === "comparar" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            
-            {/* GRÁFICO */}
             <div style={{ background: "white", borderRadius: 14, padding: "24px 24px 10px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
               <h3 style={{ marginTop: 0, color: "#1a3a5c", marginBottom: 20, fontSize: 16 }}>Evolución de Gastos por Categoría</h3>
               <div style={{ width: '100%', height: 350 }}>
@@ -522,11 +576,7 @@ export default function App() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8edf2" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 12 }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 12 }} tickFormatter={(val) => `$${val.toLocaleString("es-CL")}`} width={80} />
-                    <Tooltip 
-                      formatter={(value, name) => [`$${Number(value).toLocaleString("es-CL")}`, name]}
-                      cursor={{ fill: 'rgba(26,58,92,0.04)' }}
-                      contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", fontSize: 13 }}
-                    />
+                    <Tooltip formatter={(value, name) => [`$${Number(value).toLocaleString("es-CL")}`, name]} cursor={{ fill: 'rgba(26,58,92,0.04)' }} contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", fontSize: 13 }} />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: 20, fontSize: 13 }} />
                     {categorias.map((cat, idx) => {
                       const colors = catColors[cat] || PALETTE[idx % PALETTE.length];
@@ -537,7 +587,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* TABLA COMPARATIVA */}
             <div style={{ background: "white", borderRadius: 14, overflow: "auto", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
@@ -588,7 +637,7 @@ export default function App() {
         )}
 
         <p style={{ textAlign: "center", color: "#aaa", fontSize: 12, marginTop: 20 }}>
-          Clic en cualquier monto para editarlo · Sube comprobantes para registro automático
+          Clic en cualquier monto para editarlo · Sube comprobantes para registro automático · ☁️ Datos en la nube
         </p>
       </div>
 
